@@ -12,7 +12,7 @@ router.route('/auth/spotify/token').get(AuthController.SpotifyToken);
 // Billboard
 router.route('/billboard/active').get(BillboardController.GetActive);
 router.route('/billboard/activate/:uuid').post(BillboardController.SetActive);
-router.route('/billboard/:uuid').patch(BillboardController.Update);
+router.route('/billboard/:uuid').put(BillboardController.Update);
 router.route('/billboard/:uuid').get(BillboardController.GetByUuid);
 router.route('/billboard/:uuid').delete(BillboardController.Delete);
 router.route('/billboard').post(BillboardController.Create);

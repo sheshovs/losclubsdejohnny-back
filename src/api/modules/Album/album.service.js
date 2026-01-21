@@ -10,6 +10,23 @@ const AlbumService = {
       console.log(error)
     }
   },
+  createAlbumsIfNotExists: async (payload) => {
+    try {
+      const createdAlbums = [];
+      for (const album of payload) {
+        const existingAlbum = await pg('public.Album').where({ albumId: album.albumId }).first();
+        if (existingAlbum) {
+          createdAlbums.push(existingAlbum);
+        } else {
+          const [newAlbum] = await pg('public.Album').insert(album).returning('*');
+          createdAlbums.push(newAlbum);
+        }
+      }
+      return createdAlbums;
+    } catch (error) {
+      console.log(error)
+    }
+  },
   getAlbumById: async (albumId) => {
     try {
       const album = await pg('public.Album').where({ albumId }).first();

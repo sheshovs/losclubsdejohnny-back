@@ -46,6 +46,13 @@ const BillboardService = {
       console.log(error)
     }
   },
+  deleteBillboardAlbumRelations: async (billboardId) => {
+    try {
+      return await pg('public.BillboardAlbum').delete().where('billboardId', billboardId).returning('*');
+    } catch (error) {
+      console.log(error)
+    }
+  },
   getActiveBillboard: async () => {
     try {
       const billboard = await pg('public.Billboard').select("uuid", "startDate", "endDate").where('isActive', true).first();
@@ -66,8 +73,8 @@ const BillboardService = {
   },
   getBillboardAlbums: async (billboardId) => {
     try {
-      const albumIds = await pg("public.BillboardAlbum").select("albumId").where("billboardId", billboardId).pluck("albumId");
-      return albumIds;
+      const albumData = await pg("public.BillboardAlbum").select("albumId", "date").where("billboardId", billboardId).orderBy("date", "asc");
+      return albumData;
     } catch (error) {
       console.log(error)
     }

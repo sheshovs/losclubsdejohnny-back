@@ -25,34 +25,35 @@ const BillboardController = {
     try {
       const spotifyApiToken = getSpotifyToken();
       const albumsPayloadData = await Promise.all(albumsPayload.map(async (album) => {
-
         const albumExists = await AlbumService.getAlbumById(album.albumId);
         if (albumExists) {
           return {
             ...album,
             albumData: albumExists.albumData
           }
-        }
-
-        const albumData = await fetch(`https://api.spotify.com/v1/albums/${album.albumId}`, {
-          headers: {
-            'Authorization': `Bearer ${spotifyApiToken}`
+        } else {
+          const albumData = await fetch(`https://api.spotify.com/v1/albums/${album.albumId}`, {
+            headers: {
+              'Authorization': `Bearer ${spotifyApiToken}`
+            }
+          });
+          const albumJson = await albumData.json();
+          return {
+            ...album,
+            albumData: albumJson
           }
-        });
-        const albumJson = await albumData.json();
-        return {
-          ...album,
-          albumData: albumJson
         }
       }))
 
       const [billboardData] = await BillboardService.createBillboard(billboardPayload);
 
-      const albumsData = await AlbumService.createAlbums(albumsPayloadData);
+      albumsPayloadData.forEach(album => { delete album.date; });
+      const albumsData = await AlbumService.createAlbumsIfNotExists(albumsPayloadData);
 
       const billboardAlbumRelationsPayload = albumsData.map((album) => ({
         billboardId: billboardData.uuid,
         albumId: album.uuid,
+        date: albums.find(a => a.albumId === album.albumId).date,
       }))
 
       await BillboardService.createBillboardAlbumRelations(billboardAlbumRelationsPayload);
@@ -66,23 +67,63 @@ const BillboardController = {
   },
   Update: async (req, res) => {
     const { uuid } = req.params;
-    const billboard = await BillboardService.getBillboardByUuid(uuid);
+    const { startDate, endDate, albums } = req.body;
 
+    const billboard = await BillboardService.getBillboardByUuid(uuid);
     if (!billboard) {
       return res.status(404).json({ message: "Cartelera no encontrada" });
     }
 
-    const { startDate, endDate } = req.body;
-    const billboardPayload = {
-      startDate: startDate || billboard.startDate,
-      endDate: endDate || billboard.endDate,
+    const updatePayload = {};
+    if (startDate) updatePayload.startDate = startDate;
+    if (endDate) updatePayload.endDate = endDate;
+
+    await BillboardService.updateBillboard(uuid, updatePayload);
+
+    if (albums) {
+      const spotifyApiToken = getSpotifyToken();
+      const albumsPayload = albums.map((album) => ({
+        uuid: uuidv4(),
+        date: album.date,
+        albumId: album.albumId,
+      }))
+
+      const albumsPayloadData = await Promise.all(albumsPayload.map(async (album) => {
+        const albumExists = await AlbumService.getAlbumById(album.albumId);
+        if (albumExists) {
+          return {
+            ...album,
+            albumData: albumExists.albumData
+          }
+        } else {
+          const albumData = await fetch(`https://api.spotify.com/v1/albums/${album.albumId}`, {
+            headers: {
+              'Authorization': `Bearer ${spotifyApiToken}`
+            }
+          });
+          const albumJson = await albumData.json();
+          return {
+            ...album,
+            albumData: albumJson
+          }
+        }
+      }))
+
+      albumsPayloadData.forEach(album => { delete album.date; });
+
+      const albumsData = await AlbumService.createAlbumsIfNotExists(albumsPayloadData);
+
+      const billboardAlbumRelationsPayload = albumsData.map((album) => ({
+        billboardId: uuid,
+        albumId: album.uuid,
+        date: albums.find(a => a.albumId === album.albumId).date,
+      }))
+
+      await BillboardService.deleteBillboardAlbumRelations(uuid);
+      await BillboardService.createBillboardAlbumRelations(billboardAlbumRelationsPayload);
     }
 
-    const [billboardData] = await BillboardService.updateBillboard(uuid, billboardPayload);
-
-    res.status(200).json({
-      ...billboardData,
-    })
+    res.status(200).json({ message: "Cartelera actualizada correctamente" });
   },
   Delete: async (req, res) => {
     const { uuid } = req.params;
@@ -93,6 +134,7 @@ const BillboardController = {
     }
 
     await BillboardService.deleteBillboard(uuid);
+    await BillboardService.deleteBillboardAlbumRelations(uuid);
 
     res.status(200).json({ message: "Cartelera eliminada" });
   },
@@ -100,19 +142,44 @@ const BillboardController = {
     const data = await BillboardService.getAllBillboards();
 
     const detailedData = await Promise.all(data.map(async (billboard) => {
-      const albumIds = await BillboardService.getBillboardAlbums(billboard.uuid);
+      const albumData = await BillboardService.getBillboardAlbums(billboard.uuid);
+      const albumIds = albumData.map(a => a.albumId);
       const albums = await AlbumService.getAlbumsByIds(albumIds)
       return {
         ...billboard,
-        albums
+        albums: albumData.map(ad => {
+          const albumInfo = albums.find(a => a.uuid === ad.albumId);
+          return {
+            ...albumInfo,
+            date: ad.date
+          }
+        })
       }
     }))
     res.status(200).json([...detailedData]);
   },
   GetByUuid: async (req, res) => {
     const { uuid } = req.params;
-    const data = await BillboardService.getBillboardByUuid(uuid);
-    res.status(200).json(data);
+    const billboard = await BillboardService.getBillboardByUuid(uuid);
+
+    if (!billboard) {
+      return res.status(404).json({ message: "Cartelera no encontrada" });
+    }
+
+    const albumData = await BillboardService.getBillboardAlbums(billboard.uuid);
+    const albumIds = albumData.map(a => a.albumId);
+    const albums = await AlbumService.getAlbumsByIds(albumIds)
+
+    res.status(200).json({
+      ...billboard,
+      albums: albumData.map(ad => {
+        const albumInfo = albums.find(a => a.uuid === ad.albumId);
+        return {
+          ...albumInfo,
+          date: ad.date
+        }
+      })
+    });
   },
   GetActive: async (req, res) => {
     const data = await BillboardService.getActiveBillboard();
