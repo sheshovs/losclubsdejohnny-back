@@ -136,7 +136,7 @@ const BillboardController = {
     await BillboardService.deleteBillboard(uuid);
     await BillboardService.deleteBillboardAlbumRelations(uuid);
 
-    res.status(200).json({ message: "Cartelera eliminada" });
+    res.status(200).json({ message: "Cartelera eliminada correctamente" });
   },
   GetAll: async (req, res) => {
     const data = await BillboardService.getAllBillboards();
